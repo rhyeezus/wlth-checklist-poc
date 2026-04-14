@@ -4,6 +4,28 @@ This POC replaces the static PDF checklist workflow with live, Directus-driven i
 
 ---
 
+## Running locally
+
+This app requires **two processes running simultaneously** — Directus (the backend/CMS) and the Nuxt dev server.
+
+**Terminal 1 — start Directus:**
+```bash
+cd ~/directus-poc
+npx directus start
+```
+Directus runs at `http://localhost:8055`. The admin UI is at `http://localhost:8055/admin`.
+
+**Terminal 2 — start the Nuxt app:**
+```bash
+cd ~/Documents/GitHub/wlth-checklist-poc
+npm run dev
+```
+The app runs at `http://localhost:3000`.
+
+> If you see "Could not connect to Directus" on the index page, Directus isn't running or the `DIRECTUS_URL` in your `.env` is wrong.
+
+---
+
 ## Stack
 
 - **Nuxt 4** (SSR disabled — client-side only, required for CORS)
