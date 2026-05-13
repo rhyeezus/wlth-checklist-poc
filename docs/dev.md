@@ -4,25 +4,202 @@ This POC replaces the static PDF checklist workflow with live, Directus-driven i
 
 ---
 
-## Running locally
+## First-time setup
 
-This app requires **two processes running simultaneously** — Directus (the backend/CMS) and the Nuxt dev server.
+Follow these steps once to get everything running from scratch.
 
-**Terminal 1 — start Directus:**
+### Prerequisites
+
+- [nvm](https://github.com/nvm-sh/nvm) — required to run Node 22 (Directus does not support Node 24)
+- Node 22 via nvm:
+  ```bash
+  nvm install 22
+  ```
+
+### 1. Clone and install the Nuxt app
+
+```bash
+git clone https://github.com/rhyeezus/wlth-checklist-poc.git
+cd wlth-checklist-poc
+nvm use 22
+npm install
+```
+
+### 2. Create the `.env` file
+
+```bash
+cp .env.example .env
+```
+
+The default values in `.env.example` match the Directus setup below — no changes needed.
+
+### 3. Scaffold the Directus instance
+
+Create a directory at `~/directus-poc`, install Directus, and write its config:
+
+```bash
+mkdir ~/directus-poc && cd ~/directus-poc
+nvm use 22
+npm init -y
+npm install directus
+```
+
+Create `~/directus-poc/.env` with the following contents:
+
+```
+PORT=8055
+PUBLIC_URL=http://localhost:8055
+
+DB_CLIENT=sqlite3
+DB_FILENAME=./database.db
+
+KEY=a1b2c3d4-e5f6-7890-abcd-ef1234567890
+SECRET=super-secret-key-for-poc-only
+
+ADMIN_EMAIL=admin@wlth.com
+ADMIN_PASSWORD=admin123
+ADMIN_TOKEN=TgmfbCAZhCBxNu79yqNKKei21Glh_Kzs
+
+CORS_ENABLED=true
+CORS_ORIGIN=http://localhost:3000
+CORS_METHODS=GET,POST,PATCH,DELETE,OPTIONS
+CORS_ALLOWED_HEADERS=Content-Type,Authorization
+
+WEBSOCKETS_ENABLED=false
+CACHE_ENABLED=false
+
+STORAGE_LOCATIONS=local
+STORAGE_LOCAL_ROOT=./uploads
+```
+
+Bootstrap the database and admin user:
+
+```bash
+npx directus bootstrap
+```
+
+### 4. Start Directus
+
 ```bash
 cd ~/directus-poc
+nvm use 22
 npx directus start
 ```
-Directus runs at `http://localhost:8055`. The admin UI is at `http://localhost:8055/admin`.
 
-**Terminal 2 — start the Nuxt app:**
+Directus runs at `http://localhost:8055`. Admin UI at `http://localhost:8055/admin` (`admin@wlth.com` / `admin123`).
+
+### 5. Create collections and set permissions
+
+With Directus running, run these commands from the Nuxt project root:
+
 ```bash
-cd ~/Documents/GitHub/wlth-checklist-poc
-npm run dev
-```
-The app runs at `http://localhost:3000`.
+cd ~/path/to/wlth-checklist-poc
 
-> If you see "Could not connect to Directus" on the index page, Directus isn't running or the `DIRECTUS_URL` in your `.env` is wrong.
+# Create checklist_templates collection
+curl -X POST http://localhost:8055/collections \
+  -H "Authorization: Bearer TgmfbCAZhCBxNu79yqNKKei21Glh_Kzs" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "collection": "checklist_templates",
+    "meta": { "icon": "check_box" },
+    "schema": {},
+    "fields": [
+      { "field": "id",             "type": "integer",   "meta": { "hidden": true, "readonly": true }, "schema": { "is_primary_key": true, "has_auto_increment": true } },
+      { "field": "status",         "type": "string",    "schema": { "default_value": "draft" } },
+      { "field": "title",          "type": "string",    "schema": {} },
+      { "field": "loan_type",      "type": "string",    "schema": {} },
+      { "field": "file_type",      "type": "string",    "schema": {} },
+      { "field": "header_variant", "type": "string",    "schema": {} }
+    ]
+  }'
+
+# Add items JSON field
+curl -X POST http://localhost:8055/fields/checklist_templates \
+  -H "Authorization: Bearer TgmfbCAZhCBxNu79yqNKKei21Glh_Kzs" \
+  -H "Content-Type: application/json" \
+  -d '{"field":"items","type":"json","schema":{}}'
+
+# Add header_fields JSON field
+curl -X POST http://localhost:8055/fields/checklist_templates \
+  -H "Authorization: Bearer TgmfbCAZhCBxNu79yqNKKei21Glh_Kzs" \
+  -H "Content-Type: application/json" \
+  -d '{"field":"header_fields","type":"json","schema":{}}'
+
+# Create checklist_responses collection
+curl -X POST http://localhost:8055/collections \
+  -H "Authorization: Bearer TgmfbCAZhCBxNu79yqNKKei21Glh_Kzs" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "collection": "checklist_responses",
+    "meta": { "icon": "assignment_turned_in" },
+    "schema": {},
+    "fields": [
+      { "field": "id",                "type": "integer",   "meta": { "hidden": true, "readonly": true }, "schema": { "is_primary_key": true, "has_auto_increment": true } },
+      { "field": "template_id",       "type": "integer",   "schema": {} },
+      { "field": "applicant_name",    "type": "string",    "schema": {} },
+      { "field": "loanapp_reference", "type": "string",    "schema": {} },
+      { "field": "completed_items",   "type": "json",      "schema": {} },
+      { "field": "submitted_at",      "type": "timestamp", "schema": { "default_value": "now()" } }
+    ]
+  }'
+```
+
+Now grant public read access (Directus 11 requires `fields: ["*"]` explicitly):
+
+```bash
+PUBLIC_POLICY="abf8a154-5b1c-4a46-ac9c-7300570f4f17"
+
+# Public read on checklist_templates
+curl -X POST http://localhost:8055/permissions \
+  -H "Authorization: Bearer TgmfbCAZhCBxNu79yqNKKei21Glh_Kzs" \
+  -H "Content-Type: application/json" \
+  -d "{\"policy\":\"$PUBLIC_POLICY\",\"collection\":\"checklist_templates\",\"action\":\"read\",\"fields\":[\"*\"]}"
+
+# Public read + create on checklist_responses
+curl -X POST http://localhost:8055/permissions \
+  -H "Authorization: Bearer TgmfbCAZhCBxNu79yqNKKei21Glh_Kzs" \
+  -H "Content-Type: application/json" \
+  -d "{\"policy\":\"$PUBLIC_POLICY\",\"collection\":\"checklist_responses\",\"action\":\"read\",\"fields\":[\"*\"]}"
+
+curl -X POST http://localhost:8055/permissions \
+  -H "Authorization: Bearer TgmfbCAZhCBxNu79yqNKKei21Glh_Kzs" \
+  -H "Content-Type: application/json" \
+  -d "{\"policy\":\"$PUBLIC_POLICY\",\"collection\":\"checklist_responses\",\"action\":\"create\",\"fields\":[\"*\"]}"
+```
+
+> **Note:** `abf8a154-5b1c-4a46-ac9c-7300570f4f17` is the Public policy ID generated by `directus bootstrap`. Verify yours with:
+> `curl http://localhost:8055/policies -H "Authorization: Bearer TgmfbCAZhCBxNu79yqNKKei21Glh_Kzs"`
+
+### 6. Seed templates
+
+```bash
+cd ~/path/to/wlth-checklist-poc
+nvm use 22
+DIRECTUS_URL=http://localhost:8055 DIRECTUS_TOKEN=TgmfbCAZhCBxNu79yqNKKei21Glh_Kzs node scripts/seed-templates.mjs
+```
+
+This creates 6 published templates (3 WLTH + 3 Mortgage Mart).
+
+---
+
+## Day-to-day running
+
+Once set up, you only need two terminals each time:
+
+**Terminal 1 — Directus:**
+```bash
+cd ~/directus-poc && nvm use 22 && npx directus start
+```
+
+**Terminal 2 — Nuxt app:**
+```bash
+cd ~/path/to/wlth-checklist-poc && nvm use 22 && npm run dev
+```
+
+- App: `http://localhost:3000`
+- Directus admin: `http://localhost:8055/admin`
+
+> If templates don't load, check Directus is running and the CORS config in `~/directus-poc/.env` includes `CORS_ORIGIN=http://localhost:3000`.
 
 ---
 
