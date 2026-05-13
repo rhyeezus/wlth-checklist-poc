@@ -7,11 +7,13 @@
     "generate": "nuxt generate"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.95.2",
     "@directus/sdk": "^17.0.0",
     "@pdf-lib/fontkit": "^1.1.1",
     "@vueuse/nuxt": "^14.2.1",
     "@wlth/design-system": "github:rhyeezus/wlth-design-system",
-    "nuxt": "^4.0.0",
-    "pdf-lib": "^1.17.1"
+    "nuxt": "4.3.0",
+    "pdf-lib": "^1.17.1",
+    "sortablejs": "^1.15.7"
   }
 }

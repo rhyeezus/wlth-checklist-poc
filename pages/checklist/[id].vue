@@ -2,10 +2,28 @@
   <div class="min-h-screen bg-lightgrey-100 py-8 px-5">
     <div class="max-w-2xl mx-auto">
 
-      <NuxtLink to="/" class="inline-flex items-center gap-1.5 text-xs text-lightgrey-700 hover:text-darkblue-500 mb-6 transition-colors">
-        <UIcon name="i-heroicons-arrow-left" class="w-3.5 h-3.5" />
-        All checklists
-      </NuxtLink>
+      <div class="flex items-center justify-between mb-6">
+        <NuxtLink to="/" class="inline-flex items-center gap-1.5 text-xs text-lightgrey-700 hover:text-darkblue-500 transition-colors">
+          <UIcon name="i-heroicons-arrow-left" class="w-3.5 h-3.5" />
+          All checklists
+        </NuxtLink>
+
+        <!-- Admin actions — only shown when admin-unlocked -->
+        <div v-if="isAdmin && template" class="flex items-center gap-1.5">
+          <UButton variant="outline" color="neutral" size="xs" :to="`/admin/templates/${route.params.id}`">
+            <UIcon name="i-heroicons-pencil-square" class="w-3.5 h-3.5 mr-1" />
+            Edit
+          </UButton>
+          <UButton variant="outline" color="neutral" size="xs" @click="startDuplicate">
+            <UIcon name="i-heroicons-document-duplicate" class="w-3.5 h-3.5 mr-1" />
+            Duplicate
+          </UButton>
+          <UButton variant="outline" color="red" size="xs" @click="showDelete = true">
+            <UIcon name="i-heroicons-trash" class="w-3.5 h-3.5 mr-1" />
+            Delete
+          </UButton>
+        </div>
+      </div>
 
       <div v-if="pending" class="text-sm text-lightgrey-700">Loading checklist...</div>
       <div v-else-if="error" class="text-sm text-red-500">Failed to load checklist.</div>
@@ -73,6 +91,39 @@
                 class="bg-lightgrey-100 border border-lightgrey-300 rounded-lg px-4 py-3 my-3 text-[12px] text-lightgrey-800 leading-relaxed"
               >
                 {{ item.label }}
+              </div>
+
+              <!-- List item (non-interactive bullet — e.g. agreement terms) -->
+              <div
+                v-else-if="item.item_type === 'list_item'"
+                class="flex items-start gap-3 px-3.5 py-2 mb-0.5"
+              >
+                <span class="text-lightgrey-500 flex-shrink-0 text-[13px] mt-0.5">•</span>
+                <div class="flex-1 min-w-0">
+                  <div class="text-[13px] leading-snug text-darkblue-500">{{ item.label }}</div>
+                  <div v-if="item.note" class="text-[11.5px] mt-1 leading-relaxed text-lightgrey-700">{{ item.note }}</div>
+                </div>
+              </div>
+
+              <!-- Signature row -->
+              <div
+                v-else-if="item.item_type === 'signature_row'"
+                class="flex items-center gap-2 px-3.5 py-2 rounded-xl mb-1"
+              >
+                <span class="text-[12px] font-semibold text-darkblue-500 w-20 flex-shrink-0">{{ item.label }}</span>
+                <input
+                  type="text"
+                  placeholder="Full name"
+                  class="flex-1 min-w-0 text-[12px] text-darkblue-500 bg-lightgrey-50 border border-lightgrey-300 rounded-lg px-3 py-1.5 outline-none focus:border-royalblue-500 focus:ring-1 focus:ring-royalblue-100 transition-all placeholder:text-lightgrey-500"
+                />
+                <div class="flex-1 min-w-0 border-b-2 border-lightgrey-300 h-8 flex items-end pb-0.5 px-1">
+                  <span class="text-[10px] text-lightgrey-400 italic">Signature</span>
+                </div>
+                <input
+                  type="text"
+                  placeholder="DD / MM / YYYY"
+                  class="w-28 flex-shrink-0 text-[12px] text-darkblue-500 bg-lightgrey-50 border border-lightgrey-300 rounded-lg px-3 py-1.5 outline-none focus:border-royalblue-500 focus:ring-1 focus:ring-royalblue-100 transition-all placeholder:text-lightgrey-500"
+                />
               </div>
 
               <!-- Bottom banner / footer — rendered separately outside the loop, skip here -->
@@ -196,11 +247,59 @@
       </template>
     </div>
   </div>
+
+  <!-- Duplicate modal -->
+  <Teleport to="body">
+    <div v-if="duplicating" class="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 px-5" @click.self="duplicating = false">
+      <div class="bg-white rounded-2xl w-full max-w-sm border border-lightgrey-200 overflow-hidden">
+        <div class="h-1 bg-royalblue-500 w-full" />
+        <div class="px-6 py-5">
+          <h2 class="text-[15px] font-semibold text-darkblue-500 mb-4">Duplicate template</h2>
+          <div class="mb-3">
+            <label class="block text-[11px] font-medium text-lightgrey-700 mb-1">New title</label>
+            <input v-model="dupTitle" type="text" class="w-full text-[13px] text-darkblue-500 bg-lightgrey-50 border border-lightgrey-300 rounded-lg px-3 py-2 outline-none focus:border-royalblue-500 transition-all" />
+          </div>
+          <div class="mb-5">
+            <label class="block text-[11px] font-medium text-lightgrey-700 mb-1">Brand</label>
+            <select v-model="dupVariant" class="w-full text-[13px] text-darkblue-500 bg-lightgrey-50 border border-lightgrey-300 rounded-lg px-3 py-2 outline-none focus:border-royalblue-500 transition-all">
+              <option value="wlth">WLTH</option>
+              <option value="mortgage_mart">Mortgage Mart</option>
+            </select>
+          </div>
+          <div class="flex gap-2 justify-end">
+            <UButton variant="outline" color="neutral" size="sm" @click="duplicating = false">Cancel</UButton>
+            <UButton color="royalblue" size="sm" :loading="dupLoading" @click="runDuplicate">Duplicate</UButton>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- Delete modal -->
+  <Teleport to="body">
+    <div v-if="showDelete" class="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 px-5" @click.self="showDelete = false">
+      <div class="bg-white rounded-2xl w-full max-w-sm border border-lightgrey-200 overflow-hidden">
+        <div class="h-1 bg-red-500 w-full" />
+        <div class="px-6 py-5">
+          <h2 class="text-[15px] font-semibold text-darkblue-500 mb-2">Delete template?</h2>
+          <p class="text-[13px] text-lightgrey-600 mb-5">
+            <span class="font-medium text-darkblue-500">"{{ template?.title }}"</span> will be permanently removed. This cannot be undone.
+          </p>
+          <div class="flex gap-2 justify-end">
+            <UButton variant="outline" color="neutral" size="sm" @click="showDelete = false">Cancel</UButton>
+            <UButton color="red" size="sm" :loading="deleteLoading" @click="runDelete">Delete</UButton>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
 const route = useRoute()
-const { getTemplate, submitResponse } = useDirectus()
+const router = useRouter()
+const { getTemplate, submitResponse, duplicateTemplate, deleteTemplate } = useDirectus()
+const { isAdmin } = useAdminAuth()
 
 const { data: template, pending, error } = await useAsyncData(
   `template-${route.params.id}`,
@@ -263,6 +362,41 @@ async function downloadPdfFile() {
     alert('PDF generation failed — check the console for details.')
   } finally {
     generatingPdf.value = false
+  }
+}
+
+// ── Admin actions ─────────────────────────────────────────────────────────
+const duplicating = ref(false)
+const dupTitle = ref('')
+const dupVariant = ref('wlth')
+const dupLoading = ref(false)
+const showDelete = ref(false)
+const deleteLoading = ref(false)
+
+function startDuplicate() {
+  dupTitle.value = `${template.value?.title ?? ''} (copy)`
+  dupVariant.value = template.value?.header_variant ?? 'wlth'
+  duplicating.value = true
+}
+
+async function runDuplicate() {
+  dupLoading.value = true
+  try {
+    const result: any = await duplicateTemplate(route.params.id as string, dupTitle.value, dupVariant.value)
+    duplicating.value = false
+    router.push(`/checklist/${result.id}`)
+  } finally {
+    dupLoading.value = false
+  }
+}
+
+async function runDelete() {
+  deleteLoading.value = true
+  try {
+    await deleteTemplate(route.params.id as string)
+    router.push('/')
+  } finally {
+    deleteLoading.value = false
   }
 }
 
