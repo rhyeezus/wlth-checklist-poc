@@ -6,6 +6,9 @@
     "build": "nuxt build",
     "generate": "nuxt generate"
   },
+  "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.2",
     "@directus/sdk": "^17.0.0",
